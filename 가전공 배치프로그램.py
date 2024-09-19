@@ -1,588 +1,266 @@
-# Temporary_Major_Assign_Program(2022)
-
-# %% 0. 패키지 호출 
-import pandas as pd     # type: ignore # 파일 호출 및 반환
-import random           # 난수 생성을 통한 가전공 배치
-import os               # 파일 경로 가져오기
-import openpyxl         # type: ignore # VS에서 xlsx 파일을 불러오기 위한 패키지
-
-
-
-
-
-# %% 1. 수요조사 결과 호출 및 할당------------------------------------------------------------------------------------------
-C_name = str(input("단과대학명을 입력하세요.(ex. 사회과학대학): "))   # C_name : College_name
-F_name = str(input("학부명을 입력하세요.(ex. 경제학부): "))          # F_name : Faculty_name
-print(F_name, '\n가전공 수요조사 엑셀 파일 경로와 파일명을 복사하여 저장해주세요.\n')
-print("예시 : M = pd.read_excel('파일 경로/.../파일명.xlsx') \n\t※ A는 임의의 문자, 파일 경로는 /로 구분\n")
-M = pd.read_excel("C:/Users/qosgu/OneDrive/바탕 화면/공공안전학부.xlsx", engine='openpyxl')   # M : Major
-
-
-# 불필요한 컬럼 제거 및 데이터프레임으로 변환 후 확인
-M = M.drop(['TIMESTAMP', '가전공 배치를 위한 개인정보 동의'], axis=1)     # 불필요한 컬럼 삭
-M = pd.DataFrame(M)     # 데이터프레임으로 변환
-M                       # 데이터프레임 확인
-
-
-# 중복 응답자 확인
-M[M.duplicated(keep = False)]   # 중복응답자가 있는 경우, 인덱스 번호 출력
+# %% 1. 필요한 패키지 호출 -------------------
+import pandas as pd
+import numpy as np
+import random
+import os
+from openpyxl import load_workbook
+from io import BytesIO
+from IPython.display import display, HTML
+import base64
 
 
 
 
 
-# %% 2. 학과명 로드 및 정렬------------------------------------------------------------------------------------------------
-M_count = int(input("학부 내 전공 수를 입력하세요.(숫자만): "))    # 학부 내 전공 개수 입력
+# %% 2. 단과대학/학부명 입력 + 파일 호출 및 읽기 -------------------
+# 파일 경로 지정 (사용자의 파일 경로에 맞게 수정)
+file_path = "C:/Users/qosgu/OneDrive/바탕 화면/공공안전학부.xlsx"
 
+# 엑셀 파일 읽기
+df = pd.read_excel(file_path, engine='openpyxl')
 
-# 지망별 학과명 추출
-M_name = sorted(list(M.loc[0][1:M_count+1]))    # 첫 번째 응답자의 1~n지망을 추출하고, 가나다 순으로 정렬하여 리스트로 반환
-M_name      # 확인
-
-
-# 전공별 1~n지망 분류 리스트 생성
-for i in M_name:                # 학부 내 전공명을 i에 반복 할당
-    for j in range(M_count):    # 학부 내 전공 개수를 j에 반복 할당
-        globals()["{}_{}지망".format(i, j+1)] = []    # 전공별 1~5지망 빈 리스트 생성
+# 파일 출력
+df
 
 
 
 
 
-# %% 3. 인원별 지망 중복 체크
-# 지망 중복 응답자를 모을 리스트
-duplicate = []
-
-# 지망 내 전공 개수와 전체 전공 개수 불일치 시 duplicate에 추가
-for i in range(len(M)):                             # 전체 응답자 수 만큼의 범위
-    if len(set(M.loc[i][1:M_count+1])) != M_count:  # 전체 응답자중 응답한 전공의 개수와 전체 전공의 개수 불일치 여부 파악
-        duplicate.append(M.loc[i])                  # ex. 학부 내 5개 전공이 있지만, 1~5지망 중 1~4개의 전공만 체크하면 추가
-        print(M.loc[i])                             # 어떤 데이터인지 확인하기 위해 출력
-
-
-# 중복 체크자 확인 결과
-if len(duplicate) == 0:     # 중복 체크자가 없는 경우
-    print("1~{}지망 중복 체크자가 없습니다.\n".format(M_count))
-else:                       # 중복 체크자가 있는 경우
-    print("1~{}지망 중복 체크자는 {}명 입니다.\n".format(M_count, len(duplicate)))
-    print(duplicate)
-
-
-
-
-
-# %% 4. 전공별 배치정원 입력-----------------------------------------------------------------------------------------------
-# 58 / 41 / 57 / 27 / 28
-print("-----전공별 배치정원을 입력해주세요.-----")
-print("잘못 입력한 경우, \'Ctrl+c\' 커맨드 후 다시 실행 하세요.")
-for i in range(M_count):
-    globals()["{}_배치정원".format(M_name[i])] = int(input("{} 배치정원 : ".format(M_name[i])))
+# 이름과 전화번호 뒷자리 기준으로 중복 응답자 확인 및 별도 데이터프레임에 저장
+duplicates = df[df.duplicated(subset=['이름', '전화번호 뒷자리'], keep=False)]
+if len(duplicates) > 0:
+    print("설문 중복 응답자:")
+    for index, row in duplicates.iterrows():
+        print(f"{row['이름']}, {row['전화번호 뒷자리']}")
+    # [구분] 컬럼 추가 후 설문 중복 응답자 정보 기록
+    duplicates['구분'] = '설문 중복 응답자'
+else:
+    print("설문 중복 응답자가 없습니다.")
     
+# 중복 응답자를 데이터프레임에서 제거하고, 별도로 저장
+df = df.drop_duplicates(subset=['이름', '전화번호 뒷자리'])
+df_excluded = duplicates.copy()  # 중복 응답자를 별도 저장
 
 
 
 
-# %% 5. 전공별 배치 완료자 명단(새 리스트) 생성-----------------------------------------------------------------------------
-for i in range(M_count):
-    globals()["{}_가전공_배치".format(M_name[i])] = []
-
-
-
-
-
-# %% 6. 전공별 1~n지망 배치 완료자 명단(새 리스트) 생성------------------------------------------------------------------------
-for i in M_name:
-    for j in range(M_count):
-        globals()["{}_{}지망_배치".format(i, j+1)] = []
+# %% 3. 전공명 로드 및 정렬 -------------------
+# 지망 관련 컬럼만 추출하여 정렬
+sample_row = df.iloc[0]  # 응답 결과의 첫 번째 행을 선택
+major_columns = [col for col in df.columns if '지망' in col]
+major_name = sample_row[major_columns].unique()  # 중복되지 않게 전공명 추출
+major_name = [major for major in major_name if pd.notna(major)]  # NaN 값 제거
+major_name.sort()  # 전공명을 오름차순으로 정렬
 
 
 
 
 
-########################################################################################################################
-# %% 7. 학과별 지망 인원수 확인----------------------------------------------------------------------------------------------
-for j in range(M_count):
-    for i in range(len(M)):
-        if M.loc[i][1] == M_name[j]:
-            globals()["{}_1지망".format(M_name[j])].append(M.loc[i][0])
+# %% 4. 인원별 지망 중복 체크 -------------------
+# 각 응답자마다 같은 전공을 여러 지망에 선택했는지 확인 및 별도 데이터프레임에 저장
+duplicates_per_major = []
+
+# 기본적으로 빈 데이터프레임 생성
+df_major_duplicates = pd.DataFrame()
+
+for index, row in df.iterrows():
+    selected_majors = row[major_columns].values
+    if len(selected_majors) != len(set(selected_majors)):
+        duplicates_per_major.append(row)
+
+if len(duplicates_per_major) > 0:
+    print("전공 중복 체크자:")
+    for entry in duplicates_per_major:
+        print(f"{entry['이름']}, {entry['전화번호 뒷자리']}, {entry[major_columns].values}")
+    # 전공 중복 체크자 데이터프레임 생성 후 [구분] 컬럼 추가
+    df_major_duplicates = pd.DataFrame(duplicates_per_major)
+    df_major_duplicates['구분'] = '전공 중복 체크자'
+else:
+    print("전공 중복 체크자가 없습니다.")
+
+# 전공 중복 체크자를 데이터프레임에서 제거하고, 별도로 저장
+if not df_major_duplicates.empty:
+    df = df.drop(df_major_duplicates.index)
+    df_excluded = pd.concat([df_excluded, df_major_duplicates], ignore_index=True)  # 기존 제외된 응답자와 결합
 
 
-# 전공별 1지망 지원자 수 출력
-print("----- \t{} {} 신입생 가전공 수요조사 1지망 결과 요약\t -----".format(C_name ,F_name))
-print("{} {} 신입생 가전공 수요조사 응답자는 총 {}명 입니다.\n".format(C_name ,F_name, len(M)))
-for i in range(M_count):
-    print("{}을 1지망으로 선택한 학우는 총 {}명 입니다.\n".format(M_name[i], len(globals()["{}_1지망".format(M_name[i])])))
-    
 
 
 
-
-# %% 8. 1지망 배치 후, 배치 결과 및 초과 학과 발표---------------------------------------------------------------------------
-excess_1 = []     # 1지망 지원 결과 배치 정원을 넘어간 학과명을 저장하기 위한 리스트
-
-
-
-for i in range(M_count):
-    for j in globals()["{}_1지망".format(M_name[i])]:
-        if len(globals()["{}_1지망".format(M_name[i])]) > globals()["{}_배치정원".format(M_name[i])]:
-            print("***** {}_1지망_초과 *****\n".format(M_name[i]))
-            excess_1.append(M_name[i])
+# %% 5. 전공별 배치 정원 입력 -------------------
+# 전공별 배치 정원 입력 받기
+major_limits = {}
+for major in major_name:
+    while True:
+        try:
+            limit = int(input(f"{major}의 배치 정원을 입력하세요: "))
+            major_limits[major] = limit
             break
-        else:
-            globals()["{}_가전공_배치".format(M_name[i])].append(j)
-            globals()["{}_1지망_배치".format(M_name[i])].append(j)
-    if globals()["{}_가전공_배치".format(M_name[i])] != []:
-        print("{} 1지망 배치 완료\n".format(M_name[i]))
+        except ValueError:
+            print("유효한 숫자를 입력하세요.")
 
-
-# 1지망 미초과 인원 배치 결과
-for i in range(M_count):
-    print("1지망으로 {}에 배치된 인원".format(M_name[i]))
-    print(globals()["{}_1지망_배치".format(M_name[i])])
-    print("")
+# 입력된 전공별 배치 정원을 줄바꿈하여 출력
+print("\n입력한 전공별 배치 정원:")
+for major, limit in major_limits.items():
+    print(f"{major}: {limit}명")
 
 
 
 
 
-# %% 9. 1지망 초과 전공 ▶ 난수 생성 후 배정 및 배치 결과 발표----------------------------------------------------------------
-for i in range(M_count):
-    if globals()["{}_가전공_배치".format(M_name[i])] == []:
-        random_number = random.sample(range(0, len(globals()["{}_1지망".format(M_name[i])])), globals()["{}_배치정원".format(M_name[i])])
-        random_number.sort()
-        for j in random_number:
-            globals()["{}_가전공_배치".format(M_name[i])].append(globals()["{}_1지망".format(M_name[i])][j])
-            globals()["{}_1지망_배치".format(M_name[i])].append(globals()["{}_1지망".format(M_name[i])][j])
-    print("1지망에서 {}에 배치된 인원".format(M_name[i]))
-    print(globals()["{}_1지망_배치".format(M_name[i])])
-    print("")
+# %% 6. 전공별 전체 지망 인원수 확인 -------------------
+# 전공별 지망 인원수 확인
+major_applications = {major: [0] * len(major_columns) for major in major_name}
 
+for index, row in df.iterrows():
+    for i, major in enumerate(major_columns):
+        if row[major] in major_applications:
+            major_applications[row[major]][i] += 1
 
-# ▶ 1지망 가전공 배치 완료
-for i in range(M_count):
-    print("-----\t{}_1지망 배치 결과\t-----".format(M_name[i]))
-    print(globals()["{}_1지망_배치".format(M_name[i])])
-    print("")
+# 데이터프레임으로 변환
+major_applications_df = pd.DataFrame(major_applications, index=[f'{i+1}지망' for i in range(len(major_columns))])
+
+major_applications_df
 
 
 
 
 
-# %% 10. 가전공 미배치(1지망 탈락) 인원 ▶ 2지망 인원수 및 잔여 배정 가능 인원--------------------------------------------------
-# 초과된 전공에 대해서 1지망 배정이 된 인원들을 해당 전공 1지망 지원 명단에서 제외
-for i in range(len(excess_1)):
-    for j in globals()["{}_1지망_배치".format(excess_1[i])]:
-        globals()["{}_1지망".format(excess_1[i])].remove(j)
-
-
-# 전공별 가전공 배치된 사람들의 인덱스를 추출할 리스트 생성
-for i in range(M_count):
-    globals()["{}_가전공_배치_인덱스".format(M_name[i])] = []
-
-
-# 전체 명단에서 이미 가전공 배치된 인원들의 인덱스를 전공별로 추출
-for i in range(M_count):
-    for j in range(len(M)):
-        for k in range(len(globals()["{}_가전공_배치".format(M_name[i])])):
-            if M.loc[j][0] == globals()["{}_가전공_배치".format(M_name[i])][k]:
-                globals()["{}_가전공_배치_인덱스".format(M_name[i])].append(j)
-
-
-# 제거할 인덱스 번호 결합
-delete = []
-for i in range(M_count):
-    delete += globals()["{}_가전공_배치_인덱스".format(M_name[i])]
-
-delete.sort()
-
-
-
-# 1지망 배치가 끝난 가전공 미배치 인원 리스트 정리
-delete_1 = M.drop(delete, axis=0)
-delete_1 = delete_1.reset_index()
-delete_1 = delete_1.drop('1지망', axis=1)
-
-delete_1
-########################################################################################################################
-
-
-
-
-# %% 11. 7~10 반복(모든 지망 인원 배치 끝날 때까지)---------------------------------------------------------------------------
-after_1 = M_name.copy()
-
-for i in range(len(excess_1)):
-    after_1.remove(excess_1[i])
-
-# 가전공 배치 미완료 전공
-after_1
-
-
-# 2지망 학과별 지원자 수 확인
-for i in range(len(after_1)):
-    globals()["{}_2지망".format(after_1[i])] = []
-
-for i in range(len(delete_1)):
-    for j in range(len(after_1)):
-
-        if delete_1.loc[i][2] == str(after_1[j]):
-            globals()["{}_2지망".format(after_1[j])].append(delete_1.loc[i][1])
-
-
-# 전공별 2지망 지원자 수 출력
-print("----- \t{} {} 신입생 가전공 수요조사 2지망 결과 요약\t -----".format(C_name ,F_name))
-for i in range(len(after_1)):
-    print("{}을 2지망으로 선택한 학우는 총 {}명 입니다.\n".format(after_1[i], len(globals()["{}_2지망".format(after_1[i])])))
-
-
-# 전공별 배정인원 및 잔여 배정 가능 인원 수 출력
-print("----- \t{} {} 전공별 배정 현황 및 잔여 배정 가능 인원수\t -----".format(C_name ,F_name))
-for i in range(M_count):
-    print("{}에 배정된 인원 수 : {}명 \n남은 배정인원 수 : {}명\n".format(M_name[i], len(globals()["{}_가전공_배치_인덱스".format(M_name[i])]), globals()["{}_배치정원".format(M_name[i])]-len(globals()["{}_가전공_배치_인덱스".format(M_name[i])])))
-
-
-# 전공별 잔여 정원 계산
-for i in range(len(after_1)):
-    globals()["{}_잔여정원".format(after_1[i])] = globals()["{}_배치정원".format(after_1[i])]-len(globals()["{}_가전공_배치".format(after_1[i])])
-
-
-# 2지망 배치 후, 배치 결과 및 초과 학과 발표
-excess_2 = []   # 2지망 배치에서 초과된 학과명을 담기 위한 리스트
-
-for i in range(len(after_1)):
-    for j in globals()["{}_2지망".format(after_1[i])]:
-        if len(globals()["{}_2지망".format(after_1[i])]) > globals()["{}_배치정원".format(after_1[i])]:
-            print("***** {}_2지망_초과 *****\n".format(after_1[i]))
-            excess_2.append(after_1[i])
+# %% 7. 1~n지망 배치 후 배치 결과 발표 -------------------
+# 전공 배정 함수
+def allocate_majors(df, major_columns, major_limits):
+    # 배정 결과를 담을 딕셔너리 초기화
+    assigned_students = {major: [] for major in major_name}
+    remaining_students = df.copy()  # 아직 배정되지 않은 학생 리스트
+    
+    # 각 지망 순서대로 배정 진행 (1지망부터 마지막 지망까지)
+    for priority in range(len(major_columns)):  # 지망 개수만큼 반복
+        current_choice_col = major_columns[priority]
+        print(f"\n===== {priority + 1}지망 배정 진행 중... =====\n")
+        
+        for major in major_name:
+            # 각 전공에 해당 지망을 선택한 학생들을 필터링
+            chosen_students = remaining_students[remaining_students[current_choice_col] == major]
+            
+            # 전공 배정 가능 인원이 남아 있는 경우
+            available_slots = major_limits[major] - len(assigned_students[major])
+            if available_slots > 0:
+                if len(chosen_students) <= available_slots:
+                    # 배정 가능 인원이 충분한 경우, 모두 배정
+                    assigned_students[major].extend(chosen_students['이름'].tolist())
+                    print(f"{major}: {len(chosen_students)}명 배정 완료")
+                else:
+                    # 배정 가능 인원보다 많은 경우, 초과 인원 처리
+                    selected_students = chosen_students.sample(available_slots)
+                    assigned_students[major].extend(selected_students['이름'].tolist())
+                    print(f"{major}: {len(chosen_students) - available_slots}명 초과, {available_slots}명 무작위 배정")
+            else:
+                print(f"{major}: 이미 정원이 모두 찼습니다.")
+        
+        # 현재 지망에서 배정된 학생들을 전체 남은 학생 목록에서 제거
+        remaining_students = remaining_students[~remaining_students['이름'].isin([s for students in assigned_students.values() for s in students])]
+        print("\n\n")
+        
+        # 남은 학생이 없는 경우 종료
+        if remaining_students.empty:
+            print(f"\n{priority + 1}지망에서 모든 학생이 배정 완료되었습니다.\n")
             break
+    
+    return assigned_students, remaining_students
+
+
+
+
+
+# -------------------
+# 전공 배치 실행
+assigned_students, remaining_students = allocate_majors(df, major_columns, major_limits)
+
+# 배정 결과를 테이블로 출력
+# 각 학생의 이름 + 전화번호 뒷자리로 데이터 구성
+formatted_results = {
+    major: [f"{name}({df[df['이름'] == name]['전화번호 뒷자리'].values[0]})" for name in students]
+    for major, students in assigned_students.items()
+}
+
+# 최대 학생 수에 맞춰 테이블을 형성
+max_students = max(len(students) for students in formatted_results.values())
+for major in formatted_results:
+    formatted_results[major] += [''] * (max_students - len(formatted_results[major]))  # 빈 공간 채우기
+
+
+
+
+# 미배정 학생 처리
+if not remaining_students.empty:
+    print("\n전공 미배정 학생:")
+    print(remaining_students[['이름', '전화번호 뒷자리']])
+    # 전공 미배정 학생 데이터프레임 생성 후 [구분] 컬럼 추가
+    remaining_students['구분'] = '전공 미배정 학생'
+    # 미배정 학생을 별도 데이터프레임에 저장
+    df_excluded = pd.concat([df_excluded, remaining_students], ignore_index=True)
+else:
+    print("모든 학생이 배정되었습니다.")
+
+
+
+
+# %% 8. 최종 전공 배치 결과 발표 -------------------
+# 최종 배치 결과 출력 및 결측치 재배치
+final_result = pd.DataFrame(formatted_results)
+
+# 공백 문자열을 NaN으로 변환하여 결측치로 인식하게 처리
+final_result.replace(r'^\s*$', np.nan, regex=True, inplace=True)
+
+# 각 열에 대해 텍스트 오름차순 정렬 후 NaN 값을 맨 뒤로 보냄
+for col in final_result.columns:
+    # NaN이 아닌 값만 따로 정렬
+    non_null_values = final_result[col].dropna().sort_values()
+    
+    # NaN 값을 NaN의 개수만큼 추출
+    nan_count = final_result[col].isna().sum()
+    nan_values = [np.nan] * nan_count  # NaN 값 리스트
+    
+    # NaN이 아닌 값 + NaN 값을 결합하여 새로운 리스트 생성
+    sorted_values = non_null_values.tolist() + nan_values
+    
+    # 새로운 리스트를 해당 열에 할당
+    final_result[col] = pd.Series(sorted_values)
+
+# 재배치된 최종 배치 결과 출력
+final_result
+
+
+
+
+# %% 9. 결과 엑셀 파일 다운로드 -------------------
+# 엑셀 파일 저장 함수 수정
+def create_download_link(df_result, df_excluded, filename="전공배치결과.xlsx"):
+    towrite = BytesIO()
+    
+    # 엑셀 파일에 행번호(index)를 1번부터 포함하여 저장
+    df_result.index = df_result.index + 1  # 행 번호를 1번부터 시작하도록 설정
+    with pd.ExcelWriter(towrite, engine='openpyxl') as writer:
+        # 전공 배치 결과를 첫 번째 시트에 저장
+        df_result.to_excel(writer, sheet_name='전공 배치 결과', index=True)
+        
+        # 제외된 응답자를 두 번째 시트에 저장
+        if not df_excluded.empty:
+            # "구분" 컬럼이 포함된 경우 그대로 저장
+            df_excluded.to_excel(writer, sheet_name='제외된 응답자', index=False)
         else:
-            globals()["{}_가전공_배치".format(after_1[i])].append(j)
-            globals()["{}_2지망_배치".format(after_1[i])].append(j)
-    if globals()["{}_가전공_배치".format(after_1[i])] != []:
-        print("{} 2지망 배치 완료\n".format(after_1[i]))
+            # "구분" 컬럼을 가진 빈 데이터프레임 생성 및 저장
+            empty_excluded = pd.DataFrame(columns=['이름', '전화번호 뒷자리', '제외된 이유'])
+            empty_excluded.to_excel(writer, sheet_name='제외된 응답자', index=False)
 
-
-# 2지망 미초과 인원 배치 결과
-for i in range(M_count):
-    print("2지망으로 {}에 배치된 인원".format(M_name[i]))
-    print(globals()["{}_2지망_배치".format(M_name[i])])
-    print("")
-
-
-# 2지망 초과 전공 ▶ 난수 생성 후 배정 및 배치 결과 발표----------------------------------------------------------------
-for i in range(len(after_1)):
-    if globals()["{}_가전공_배치".format(after_1[i])] == []:
-        random_number = random.sample(range(0, len(globals()["{}_1지망".format(after_1[i])])), globals()["{}_배치정원".format(after_1[i])])
-        random_number.sort()
-        for j in random_number:
-            globals()["{}_가전공_배치".format(after_1[i])].append(globals()["{}_2지망".format(after_1[i])][j])
-            globals()["{}_2지망_배치".format(after_1[i])].append(globals()["{}_2지망".format(after_1[i])][j])
-    print("2지망에서 {}에 배치된 인원".format(after_1[i]))
-    print(globals()["{}_2지망_배치".format(after_1[i])])
-    print("")
-
-
-# ▶ 2지망 가전공 배치 완료
-for i in range(len(after_1)):
-    print("-----\t{}_2지망 배치 결과\t-----".format(after_1[i]))
-    print(globals()["{}_2지망_배치".format(after_1[i])])
-    print("")
+    towrite.seek(0)
     
+    # base64 인코딩
+    b64 = base64.b64encode(towrite.read()).decode()
     
-    
-# 가전공 미배치(2지망 탈락) 인원 ▶ 3지망 인원수 및 잔여 배정 가능 인원--------------------------------------------------
-# 초과된 전공에 대해서 2지망 배정이 된 인원들을 해당 전공 2지망 지원 명단에서 제외
-for i in range(len(excess_2)):
-    for j in globals()["{}_2지망_배치".format(excess_2[i])]:
-        globals()["{}_2지망".format(excess_2[i])].remove(j)
-
-
-# 전공별 가전공 배치된 사람들의 인덱스를 추출할 리스트 생성
-for i in range(len(after_1)):
-    globals()["{}_가전공_배치_인덱스".format(after_1[i])] = []
-
-
-# 전체 명단에서 이미 가전공 배치된 인원들의 인덱스를 전공별로 추출
-for i in range(len(after_1)):
-    for j in range(len(M)):
-        for k in range(len(globals()["{}_가전공_배치".format(after_1[i])])):
-            if M.loc[j][0] == globals()["{}_가전공_배치".format(after_1[i])][k]:
-                globals()["{}_가전공_배치_인덱스".format(after_1[i])].append(j)
-
-
-# 제거할 인덱스 번호 결합
-delete = []
-for i in range(len(after_1)):
-    delete += globals()["{}_가전공_배치_인덱스".format(after_1[i])]
-
-delete.sort()
-
-
-
-# 2지망 배치가 끝난 가전공 미배치 인원 리스트 정리
-delete_2 = M.drop(delete, axis=0)
-delete_2 = delete_2.reset_index()
-delete_2 = delete_2.drop('2지망', axis=1)
-
-delete_2
-
-
-
-
-after_2 = M_name.copy()
-
-for i in range(len(excess_2)):
-    after_2.remove(excess_2[i])
-
-# 가전공 배치 미완료 전공
-after_2
-
-
-# 2지망 학과별 지원자 수 확인
-for i in range(len(after_2)):
-    globals()["{}_3지망".format(after_2[i])] = []
-
-for i in range(len(delete_2)):
-    for j in range(len(after_2)):
-
-        if delete_2.loc[i][3] == str(after_2[j]):
-            globals()["{}_3지망".format(after_2[j])].append(delete_2.loc[i][1])
-
-
-# 전공별 3지망 지원자 수 출력
-print("----- \t{} {} 신입생 가전공 수요조사 3지망 결과 요약\t -----".format(C_name ,F_name))
-for i in range(len(after_2)):
-    print("{}을 3지망으로 선택한 학우는 총 {}명 입니다.\n".format(after_2[i], len(globals()["{}_3지망".format(after_2[i])])))
-
-
-# 전공별 배정인원 및 잔여 배정 가능 인원 수 출력
-print("----- \t{} {} 전공별 배정 현황 및 잔여 배정 가능 인원수\t -----".format(C_name ,F_name))
-for i in range(M_count):
-    print("{}에 배정된 인원 수 : {}명 \n남은 배정인원 수 : {}명\n".format(M_name[i], len(globals()["{}_가전공_배치_인덱스".format(M_name[i])]), globals()["{}_배치정원".format(M_name[i])]-len(globals()["{}_가전공_배치_인덱스".format(M_name[i])])))
-
-
-# 전공별 잔여 정원 계산
-for i in range(len(after_2)):
-    globals()["{}_잔여정원".format(after_2[i])] = globals()["{}_배치정원".format(after_2[i])]-len(globals()["{}_가전공_배치".format(after_2[i])])
-
-
-# 3지망 배치 후, 배치 결과 및 초과 학과 발표
-excess_3 = []   # 3지망 배치에서 초과된 학과명을 담기 위한 리스트
-
-for i in range(len(after_2)):
-    for j in globals()["{}_3지망".format(after_2[i])]:
-        if len(globals()["{}_3지망".format(after_2[i])]) > globals()["{}_배치정원".format(after_2[i])]:
-            print("***** {}_3지망_초과 *****\n".format(after_2[i]))
-            excess_3.append(after_2[i])
-            break
-        else:
-            globals()["{}_가전공_배치".format(after_2[i])].append(j)
-            globals()["{}_3지망_배치".format(after_2[i])].append(j)
-    if globals()["{}_가전공_배치".format(after_2[i])] != []:
-        print("{} 3지망 배치 완료\n".format(after_2[i]))
-
-
-# 3지망 미초과 인원 배치 결과
-for i in range(M_count):
-    print("3지망으로 {}에 배치된 인원".format(M_name[i]))
-    print(globals()["{}_3지망_배치".format(M_name[i])])
-    print("")
-
-
-# 3지망 초과 전공 ▶ 난수 생성 후 배정 및 배치 결과 발표----------------------------------------------------------------
-for i in range(len(after_2)):
-    if globals()["{}_가전공_배치".format(after_2[i])] == []:
-        random_number = random.sample(range(0, len(globals()["{}_2지망".format(after_2[i])])), globals()["{}_배치정원".format(after_2[i])])
-        random_number.sort()
-        for j in random_number:
-            globals()["{}_가전공_배치".format(after_2[i])].append(globals()["{}_3지망".format(after_2[i])][j])
-            globals()["{}_3지망_배치".format(after_2[i])].append(globals()["{}_3지망".format(after_2[i])][j])
-    print("3지망에서 {}에 배치된 인원".format(after_2[i]))
-    print(globals()["{}_3지망_배치".format(after_2[i])])
-    print("")
-
-
-# ▶ 3지망 가전공 배치 완료
-for i in range(len(after_2)):
-    print("-----\t{}_3지망 배치 결과\t-----".format(after_2[i]))
-    print(globals()["{}_3지망_배치".format(after_2[i])])
-    print("")
-    
-    
-    
-# 가전공 미배치(3지망 탈락) 인원 ▶ 3지망 인원수 및 잔여 배정 가능 인원--------------------------------------------------
-# 초과된 전공에 대해서 3지망 배정이 된 인원들을 해당 전공 3지망 지원 명단에서 제외
-for i in range(len(excess_3)):
-    for j in globals()["{}_3지망_배치".format(excess_3[i])]:
-        globals()["{}_3지망".format(excess_3[i])].remove(j)
-
-
-# 전공별 가전공 배치된 사람들의 인덱스를 추출할 리스트 생성
-for i in range(len(after_2)):
-    globals()["{}_가전공_배치_인덱스".format(after_2[i])] = []
-
-
-# 전체 명단에서 이미 가전공 배치된 인원들의 인덱스를 전공별로 추출
-for i in range(len(after_2)):
-    for j in range(len(M)):
-        for k in range(len(globals()["{}_가전공_배치".format(after_2[i])])):
-            if M.loc[j][0] == globals()["{}_가전공_배치".format(after_2[i])][k]:
-                globals()["{}_가전공_배치_인덱스".format(after_2[i])].append(j)
-
-
-# 제거할 인덱스 번호 결합
-delete = []
-for i in range(len(after_2)):
-    delete += globals()["{}_가전공_배치_인덱스".format(after_2[i])]
-
-delete.sort()
-
-
-
-# 3지망 배치가 끝난 가전공 미배치 인원 리스트 정리
-delete_3 = M.drop(delete, axis=0)
-delete_3 = delete_3.reset_index()
-delete_3 = delete_3.drop('3지망', axis=1)
-
-delete_3
-
-
-
-
-
-after_3 = M_name.copy()
-
-for i in range(len(excess_3)):
-    after_3.remove(excess_3[i])
-
-# 가전공 배치 미완료 전공
-after_3
-
-
-# 3지망 학과별 지원자 수 확인
-for i in range(len(after_3)):
-    globals()["{}_4지망".format(after_3[i])] = []
-
-for i in range(len(delete_3)):
-    for j in range(len(after_3)):
-
-        if delete_3.loc[i][4] == str(after_3[j]):
-            globals()["{}_4지망".format(after_3[j])].append(delete_3.loc[i][1])
-
-
-# 전공별 4지망 지원자 수 출력
-print("----- \t{} {} 신입생 가전공 수요조사 4지망 결과 요약\t -----".format(C_name ,F_name))
-for i in range(len(after_3)):
-    print("{}을 4지망으로 선택한 학우는 총 {}명 입니다.\n".format(after_3[i], len(globals()["{}_4지망".format(after_3[i])])))
-
-
-# 전공별 배정인원 및 잔여 배정 가능 인원 수 출력
-print("----- \t{} {} 전공별 배정 현황 및 잔여 배정 가능 인원수\t -----".format(C_name ,F_name))
-for i in range(M_count):
-    print("{}에 배정된 인원 수 : {}명 \n남은 배정인원 수 : {}명\n".format(M_name[i], len(globals()["{}_가전공_배치_인덱스".format(M_name[i])]), globals()["{}_배치정원".format(M_name[i])]-len(globals()["{}_가전공_배치_인덱스".format(M_name[i])])))
-
-
-# 전공별 잔여 정원 계산
-for i in range(len(after_3)):
-    globals()["{}_잔여정원".format(after_3[i])] = globals()["{}_배치정원".format(after_3[i])]-len(globals()["{}_가전공_배치".format(after_3[i])])
-
-
-# 4지망 배치 후, 배치 결과 및 초과 학과 발표
-excess_4 = []   # 4지망 배치에서 초과된 학과명을 담기 위한 리스트
-
-for i in range(len(after_3)):
-    for j in globals()["{}_4지망".format(after_3[i])]:
-        if len(globals()["{}_4지망".format(after_3[i])]) > globals()["{}_배치정원".format(after_3[i])]:
-            print("***** {}_4지망_초과 *****\n".format(after_3[i]))
-            excess_4.append(after_3[i])
-            break
-        else:
-            globals()["{}_가전공_배치".format(after_3[i])].append(j)
-            globals()["{}_4지망_배치".format(after_3[i])].append(j)
-    if globals()["{}_가전공_배치".format(after_3[i])] != []:
-        print("{} 4지망 배치 완료\n".format(after_3[i]))
-
-
-# 4지망 미초과 인원 배치 결과
-for i in range(M_count):
-    print("4지망으로 {}에 배치된 인원".format(M_name[i]))
-    print(globals()["{}_4지망_배치".format(M_name[i])])
-    print("")
-
-
-# 4지망 초과 전공 ▶ 난수 생성 후 배정 및 배치 결과 발표----------------------------------------------------------------
-for i in range(len(after_3)):
-    if globals()["{}_가전공_배치".format(after_3[i])] == []:
-        random_number = random.sample(range(0, len(globals()["{}_3지망".format(after_3[i])])), globals()["{}_배치정원".format(after_3[i])])
-        random_number.sort()
-        for j in random_number:
-            globals()["{}_가전공_배치".format(after_3[i])].append(globals()["{}_4지망".format(after_3[i])][j])
-            globals()["{}_4지망_배치".format(after_3[i])].append(globals()["{}_4지망".format(after_3[i])][j])
-    print("4지망에서 {}에 배치된 인원".format(after_3[i]))
-    print(globals()["{}_4지망_배치".format(after_3[i])])
-    print("")
-
-
-# ▶ 4지망 가전공 배치 완료
-for i in range(len(after_3)):
-    print("-----\t{}_4지망 배치 결과\t-----".format(after_3[i]))
-    print(globals()["{}_4지망_배치".format(after_3[i])])
-    print("")
-    
-    
-    
-# 가전공 미배치(4지망 탈락) 인원 ▶ 4지망 인원수 및 잔여 배정 가능 인원--------------------------------------------------
-# 초과된 전공에 대해서 4지망 배정이 된 인원들을 해당 전공 4지망 지원 명단에서 제외
-for i in range(len(excess_4)):
-    for j in globals()["{}_4지망_배치".format(excess_4[i])]:
-        globals()["{}_4지망".format(excess_4[i])].remove(j)
-
-
-# 전공별 가전공 배치된 사람들의 인덱스를 추출할 리스트 생성
-for i in range(len(after_3)):
-    globals()["{}_가전공_배치_인덱스".format(after_3[i])] = []
-
-
-# 전체 명단에서 이미 가전공 배치된 인원들의 인덱스를 전공별로 추출
-for i in range(len(after_3)):
-    for j in range(len(M)):
-        for k in range(len(globals()["{}_가전공_배치".format(after_3[i])])):
-            if M.loc[j][0] == globals()["{}_가전공_배치".format(after_3[i])][k]:
-                globals()["{}_가전공_배치_인덱스".format(after_3[i])].append(j)
-
-
-# 제거할 인덱스 번호 결합
-delete = []
-for i in range(len(after_3)):
-    delete += globals()["{}_가전공_배치_인덱스".format(after_3[i])]
-
-delete.sort()
-
-
-
-# 3지망 배치가 끝난 가전공 미배치 인원 리스트 정리
-delete_4 = M.drop(delete, axis=0)
-delete_4 = delete_4.reset_index()
-delete_4 = delete_4.drop('4지망', axis=1)
-
-delete_4
-
-
-
-
-# %% 12. 전공 미배치 인원(데이터 중복 검사)
-unassigned_students = delete_4  # 전공 미배치 인원 명단
-unassigned_duplicates = unassigned_students[unassigned_students.duplicated()]
-print("전공 미배치 인원 중 중복 데이터:")
-print(unassigned_duplicates)
-
-# %% 13. 최종 가전공 배치 결과 발표
-for major in M_name:  # M_name은 전공명 리스트
-    assigned_students = globals()[f"{major}_가전공_배치"]
-    print(f"{major} 전공 배치 결과:")
-    print(assigned_students)
-
-# %% 14. 학부 및 가전공별 엑셀 파일 변환
-for major in M_name:
-    assigned_students_df = pd.DataFrame(globals()[f"{major}_가전공_배치"])
-    assigned_students_df.to_excel(f"{major}_배치결과.xlsx", index=False)
+    # 다운로드 링크 생성
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">엑셀 파일 다운로드</a>'
+    return HTML(href)
+
+# 다운로드 링크 생성 및 표시
+display(create_download_link(final_result, df_excluded))
